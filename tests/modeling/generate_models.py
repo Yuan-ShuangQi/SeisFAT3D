@@ -1,27 +1,21 @@
+import sys; sys.path.append("../src/")
+
 import numpy as np
+import functions as pyf
 
-x_max = 8e3
-y_max = 5e3
-z_max = 2e3
+parameters = str(sys.argv[1])
 
-dh = 25.0
+nx = int(pyf.catch_parameter(parameters, "x_samples"))
+ny = int(pyf.catch_parameter(parameters, "y_samples"))
+nz = int(pyf.catch_parameter(parameters, "z_samples"))
 
-nx = int((x_max / dh) + 1)
-ny = int((y_max / dh) + 1)
-nz = int((z_max / dh) + 1)
+dz = float(pyf.catch_parameter(parameters, "z_spacing"))
 
-vp_model = np.zeros((nz, nx, ny)) + 1500
-vs_model = np.zeros((nz, nx, ny)) 
-ro_model = np.zeros((nz, nx, ny)) + 1000
+vp = np.array([1500, 1700, 1900, 2300, 3000, 3500])
+z = np.array([200, 500, 1000, 1500, 1500])
 
-v = np.array([1500, 1700, 1900, 2300, 3000])
-z = np.array([400, 400, 400, 400])
+Vp = np.zeros((nz,nx,ny)) + vp[0]
+for i in range(len(z)): 
+    Vp[int(np.sum(z[:i+1]/dz)):] = vp[i+1]
 
-for i in range(len(z)):
-    vp_model[int(np.sum(z[:i+1]/dh)):] = v[i+1]
-    vs_model[int(np.sum(z[:i+1]/dh)):] = 0.7*v[i+1]
-    ro_model[int(np.sum(z[:i+1]/dh)):] = 310*v[i+1]**0.25
-
-vp_model.flatten("F").astype(np.float32, order = "F").tofile(f"../inputs/models/modeling_test_vp_model_{nz}x{nx}x{ny}_{dh:.0f}m.bin")
-vs_model.flatten("F").astype(np.float32, order = "F").tofile(f"../inputs/models/modeling_test_vs_model_{nz}x{nx}x{ny}_{dh:.0f}m.bin")
-ro_model.flatten("F").astype(np.float32, order = "F").tofile(f"../inputs/models/modeling_test_ro_model_{nz}x{nx}x{ny}_{dh:.0f}m.bin")
+Vp.flatten("F").astype(np.float32, order = "F").tofile(pyf.catch_parameter(parameters, "vp_model_file"))

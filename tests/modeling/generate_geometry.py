@@ -1,34 +1,29 @@
+import sys; sys.path.append("../src/")
+
 import numpy as np
+import functions as pyf
 
-nsx = 2
-nsy = 2
+parameters = str(sys.argv[1])
 
-nrx = 157 
-nry = 4
+ns = 3
+nr = 401
 
-ns = nsx*nsy
-nr = nrx*nry
+SPS = np.zeros((ns, 3))
+RPS = np.zeros((nr, 3))
+XPS = np.zeros((ns, 3))
 
-sx, sy = np.meshgrid(np.linspace(100, 7900, nsx), np.linspace(100, 4900, nsy))
+SPS[:, 0] = np.linspace(100, 19900, ns) 
+SPS[:, 1] = 500 
+SPS[:, 2] = 0.0 
 
-rx, ry = np.meshgrid(np.linspace(100, 7900, nrx), np.linspace(1000, 4000, nry))
-
-SPS = np.zeros((ns, 3), dtype = float)
-RPS = np.zeros((nr, 3), dtype = float)
-XPS = np.zeros((ns, 3), dtype = int)
-
-SPS[:,0] = np.reshape(sx, [ns], order = "F")
-SPS[:,1] = np.reshape(sy, [ns], order = "F")
-SPS[:,2] = np.zeros(ns)
-
-RPS[:,0] = np.reshape(rx, [nr], order = "C")
-RPS[:,1] = np.reshape(ry, [nr], order = "C")
-RPS[:,2] = np.zeros(nr)
+RPS[:, 0] = np.linspace(0, 20000, nr)
+RPS[:, 1] = 500 
+RPS[:, 2] = 0.0 
 
 XPS[:, 0] = np.arange(ns)
-XPS[:, 1] = np.arange(ns)*nrx 
-XPS[:, 2] = np.arange(ns)*nrx + nrx 
+XPS[:, 1] = np.zeros(ns) 
+XPS[:, 2] = np.zeros(ns) + nr 
 
-np.savetxt("../inputs/geometry/modeling_test_SPS.txt", SPS, fmt = "%.2f", delimiter = ",")
-np.savetxt("../inputs/geometry/modeling_test_RPS.txt", RPS, fmt = "%.2f", delimiter = ",")
-np.savetxt("../inputs/geometry/modeling_test_XPS.txt", XPS, fmt = "%.0f", delimiter = ",")
+np.savetxt(pyf.catch_parameter(parameters, "SPS"), SPS, fmt = "%.2f", delimiter = ",")
+np.savetxt(pyf.catch_parameter(parameters, "RPS"), RPS, fmt = "%.2f", delimiter = ",")
+np.savetxt(pyf.catch_parameter(parameters, "XPS"), XPS, fmt = "%.0f", delimiter = ",")

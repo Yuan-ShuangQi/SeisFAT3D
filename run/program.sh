@@ -1,76 +1,61 @@
 #!/bin/bash
 
+# Input Output scripts --------------------------------------------------------------------------------
+
 admin="../src/admin/admin.cpp"
+
+# Acquisition geometry scripts ------------------------------------------------------------------------
+
 geometry="../src/geometry/geometry.cpp"
 
 # Seismic modeling scripts ----------------------------------------------------------------------------
 
-folder="../src/modeling"
+modeling="../src/modeling/modeling.cu"
 
-modeling="$folder/modeling.cpp"
-
-eikonal="$folder/hfreq/eikonal.cu"
-elastic="$folder/lfreq/elastic.cu"
-
-eikonal_iso="$folder/hfreq/eikonal_iso.cu"
-eikonal_ani="$folder/hfreq/eikonal_ani.cu"
-
-elastic_iso="$folder/lfreq/elastic_iso.cu"
-elastic_ani="$folder/lfreq/elastic_ani.cu"
+eikonal_iso="../src/modeling/eikonal_iso.cu"
+eikonal_ani="../src/modeling/eikonal_ani.cu"
 
 modeling_main="../src/modeling_main.cpp"
 
-modeling_all="$modeling $eikonal $elastic 
-              $eikonal_iso $elastic_iso 
-              $eikonal_ani $elastic_ani"
+modeling_all="$modeling $eikonal_iso $eikonal_ani"
 
 # Seismic inversion scripts ---------------------------------------------------------------------------
 
-folder="../src/inversion"
+inversion="../src/inversion/inversion.cpp"
 
-tomography="$folder/tomography.cpp"
-
-least_squares="$folder/least_squares.cpp"
-adjoint_state="$folder/adjoint_state.cu"
+tomography_iso="../src/inversion/tomography_iso.cpp"
+tomography_vti="../src/inversion/tomography_vti.cpp"
 
 inversion_main="../src/inversion_main.cpp"
 
-inversion_all="$tomography $least_squares $adjoint_state"
+inversion_all="$inversion $tomography_iso $tomography_vti"
 
 # Seismic migration scripts ---------------------------------------------------------------------------
 
-folder="../src/migration"
+migration="../src/migration/migration.cu"
 
-kirchhoff="$folder/kirchhoff.cu"
-
-migration="$folder/migration.cpp"
+kirchhoff_iso="../src/migration/kirchhoff_iso.cu"
+kirchhoff_ani="../src/migration/kirchhoff_ani.cu"
 
 migration_main="../src/migration_main.cpp"
 
-migration_all="$migration $kirchhoff"
+migration_all="$migration $kirchhoff_iso $kirchhoff_ani"
 
 # Compiler flags --------------------------------------------------------------------------------------
 
-flags="-Xcompiler -fopenmp --std=c++11 --use_fast_math --relocatable-device-code=true -lm -O3"
+flags="-Xcompiler -fopenmp --std=c++11 --relocatable-device-code=true -lm -O3"
 
 # Main dialogue ---------------------------------------------------------------------------------------
 
 USER_MESSAGE="
 -------------------------------------------------------------------------------
-                                 \033[34mSeisFAT2D\033[0;0m
+                                 \033[34mSeisFAT3D\033[0;0m
 -------------------------------------------------------------------------------
-\nUsage:\n
-    $ $0 -compile              
-    $ $0 -modeling                      
-    $ $0 -inversion           
-    $ $0 -migration
-
-Tests:
-
-    $ $0 -test_modeling                      
-    $ $0 -test_inversion           
-    $ $0 -test_migration
-    
+\nUsage:
+        $ $0 -compile              
+        $ $0 -modeling                      
+        $ $0 -inversion           
+        $ $0 -migration
 -------------------------------------------------------------------------------
 "
 
@@ -96,8 +81,8 @@ case "$1" in
     echo -e "../bin/\033[31mmodeling.exe\033[m" 
     nvcc $admin $geometry $modeling_all $modeling_main $flags -o ../bin/modeling.exe
 
-    echo -e "../bin/\033[31minversion.exe\033[m" 
-    nvcc $admin $geometry $modeling_all $inversion_all $inversion_main $flags -o ../bin/inversion.exe
+    # echo -e "../bin/\033[31minversion.exe\033[m" 
+    # nvcc $admin $geometry $modeling_all $inversion_all $inversion_main $flags -o ../bin/inversion.exe
 
     echo -e "../bin/\033[31mmigration.exe\033[m"
     nvcc $admin $geometry $modeling_all $migration_all $migration_main $flags -o ../bin/migration.exe
@@ -111,11 +96,11 @@ case "$1" in
     rm ../inputs/data/*.bin
     rm ../inputs/geometry/*.txt
     rm ../inputs/models/*.bin
-    rm ../outputs/convergence/*.txt
-    rm ../outputs/migratedImages/*.bin
-    rm ../outputs/recoveredModels/*.bin
-    rm ../outputs/syntheticData/*.bin
-    rm ../outputs/travelTimeTables/*.bin
+    rm ../outputs/residuo/*.txt
+    rm ../outputs/seismic/*.bin
+    rm ../outputs/models/*.bin
+    rm ../outputs/data/*.bin
+    rm ../outputs/times/*.bin
 ;;
 
 -modeling) 
@@ -139,52 +124,58 @@ case "$1" in
     exit 0
 ;;
 
+
 -test_modeling)
 
-    folder=../tests/modeling
+    prefix=../tests/modeling
+    parameters=$prefix/parameters.txt
 
-    python3 -B $folder/generate_models.py
-    python3 -B $folder/generate_geometry.py
+    python3 -B $prefix/generate_models.py $parameters
+    python3 -B $prefix/generate_geometry.py $parameters
 
-    ./../bin/modeling.exe $folder/parameters_eikonal.txt
-    ./../bin/modeling.exe $folder/parameters_elastic.txt
+    ./../bin/modeling.exe $parameters
 
-    python3 -B $folder/generate_figures.py
+    python3 -B $prefix/generate_figures.py $parameters
 
 	exit 0
 ;;
 
 -test_inversion) 
 
-    folder=../tests/inversion
+    prefix=../tests/inversion
+    parameters=$prefix/parameters.txt
 
-    python3 -B $folder/generate_models.py
-    python3 -B $folder/generate_geometry.py
+    python3 -B $prefix/generate_models.py $parameters
+    python3 -B $prefix/generate_geometry.py $parameters
 
-    ./../bin/modeling.exe $folder/parameters_obsData.txt
+    true_model="model_file = ../inputs/models/inversion_test_true_vp.bin"
+    init_model="model_file = ../inputs/models/inversion_test_init_vp.bin"
 
-    ./../bin/inversion.exe $folder/parameters_least_squares.txt
-    ./../bin/inversion.exe $folder/parameters_adjoint_state.txt
+    ./../bin/modeling.exe $parameters
 
-    python3 -B $folder/generate_figures.py
+    sed -i "s|$true_model|$init_model|g" "$parameters"    
+    
+    ./../bin/inversion.exe $parameters
+
+    sed -i "s|$init_model|$true_model|g" "$parameters"
+
+    python3 -B $prefix/generate_figures.py $parameters
 
     exit 0
 ;;
 
 -test_migration)
 
-    folder=../tests/migration
+    prefix=../tests/migration
+    parameters=$prefix/parameters.txt
 
-    python3 -B $folder/generate_models.py
-    python3 -B $folder/generate_geometry.py
+    # python3 -B $prefix/generate_models.py $parameters
+    # python3 -B $prefix/generate_geometry.py $parameters
+    # python3 -B $prefix/generate_input_data.py $parameters
 
-    ./../bin/modeling.exe $folder/parameters_obsData.txt
+    # ./../bin/migration.exe $parameters
 
-    python3 -B $folder/data_preconditioning.py
-
-    ./../bin/migration.exe $folder/parameters_kirchhoff.txt
-
-    python3 -B $folder/generate_figures.py
+    python3 -B $prefix/generate_figures.py $parameters
 
 	exit 0
 ;;

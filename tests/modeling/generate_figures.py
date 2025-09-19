@@ -4,99 +4,56 @@ import numpy as np
 import matplotlib.pyplot as plt
 import functions as pyf
 
-path_SPS = "../inputs/geometry/modeling_test_SPS.txt"
-path_RPS = "../inputs/geometry/modeling_test_RPS.txt"
-path_XPS = "../inputs/geometry/modeling_test_XPS.txt"
+parameters = str(sys.argv[1])
 
-nx = 321
-ny = 201
-nz = 81 
+sps_path = pyf.catch_parameter(parameters, "SPS") 
+rps_path = pyf.catch_parameter(parameters, "RPS") 
+xps_path = pyf.catch_parameter(parameters, "XPS") 
 
-dx = 25.0
-dy = 25.0
-dz = 25.0
+nx = int(pyf.catch_parameter(parameters, "x_samples"))
+ny = int(pyf.catch_parameter(parameters, "y_samples"))
+nz = int(pyf.catch_parameter(parameters, "z_samples"))
 
-model_vp = pyf.read_binary_volume(nz, nx, ny, f"../inputs/models/modeling_test_vp_model_{nz}x{nx}x{ny}_{dx:.0f}m.bin")
-model_vs = pyf.read_binary_volume(nz, nx, ny, f"../inputs/models/modeling_test_vs_model_{nz}x{nx}x{ny}_{dx:.0f}m.bin")
-model_ro = pyf.read_binary_volume(nz, nx, ny, f"../inputs/models/modeling_test_ro_model_{nz}x{nx}x{ny}_{dx:.0f}m.bin")
+dx = float(pyf.catch_parameter(parameters, "x_spacing"))
+dy = float(pyf.catch_parameter(parameters, "y_spacing"))
+dz = float(pyf.catch_parameter(parameters, "z_spacing"))
+
+model_vp = pyf.read_binary_volume(nz, nx, ny, pyf.catch_parameter(parameters, "vp_model_file"))
 
 dh = np.array([dx, dy, dz])
 slices = np.array([0.5*nz, 0.5*ny, 0.5*nx], dtype = int)
 
-pyf.plot_model_3D(model_vp, dh, slices, shots = path_SPS, 
-                  nodes = path_RPS, adjx = 0.8, dbar = 1.5,
-                  cblab = "P wave velocity [km/s]", 
-                  vmin = 1000, vmax = 3000)
-plt.savefig("modeling_test_vp.png", dpi = 300)
+pyf.plot_model_3D(model_vp, dh, slices, shots = sps_path, nodes = rps_path, scale = 14, 
+                 adjx = 0.8, dbar = 1.5, cmap = "Greys", cblab = "Vp [m/s]")
+plt.savefig("modeling_test_setup.png", dpi = 200)
+plt.show()
 
-pyf.plot_model_3D(model_vs, dh, slices, shots = path_SPS, 
-                  nodes = path_RPS, adjx = 0.8, dbar = 1.5,
-                  cblab = "S wave velocity [km/s]",
-                  vmin = 1000, vmax = 3000)
-plt.savefig("modeling_test_vs.png", dpi = 300)
+SPS = np.loadtxt(sps_path, delimiter = ",", comments = "#", dtype = float) 
+RPS = np.loadtxt(rps_path, delimiter = ",", comments = "#", dtype = float) 
+XPS = np.loadtxt(xps_path, delimiter = ",", comments = "#", dtype = int)  
 
-pyf.plot_model_3D(model_ro, dh, slices, shots = path_SPS, 
-                  nodes = path_RPS, adjx = 0.8, dbar = 1.5,
-                  cblab = "Density [g/cm³]",
-                  vmin = 1000, vmax = 3000)
-plt.savefig("modeling_test_rho.png", dpi = 300)
+ns = len(SPS)
+nr = len(RPS)
 
-nt = 5001
-dt = 1e-3
+v = np.array([1500, 1700, 1900, 2300, 3000, 3500])
+z = np.array([200, 500, 1000, 1500, 1500])
 
-ns = 4
-nr = 157
+output_folder = pyf.catch_parameter(parameters, "modeling_output_folder")
 
-xloc = np.linspace(0, nr-1, 5)
-xlab = np.linspace(50, 7950, 5, dtype = int)
-
-tloc = np.linspace(0, nt-1, 11)
-tlab = np.linspace(0, (nt-1)*dt, 11)
-
-fig, ax = plt.subplots(ncols = 4, figsize = (16,6))
-
-for i in range(ns):
-    
-    eikonal = pyf.read_binary_array(nr, f"../outputs/syntheticData/eikonal_iso_nStations157_shot_{i+1}.bin")
-    elastic = pyf.read_binary_matrix(nt, nr, f"../outputs/syntheticData/elastic_iso_nStations157_nSamples5001_shot_{i+1}.bin")
-
-    scale = 0.9*np.std(elastic)
-
-    ax[i].imshow(elastic, aspect = "auto", cmap = "Greys", vmin = -scale, vmax = scale)
-    ax[i].plot(eikonal / dt, "--")
-
-    ax[i].set_xticks(xloc)
-    ax[i].set_yticks(tloc)
-    ax[i].set_xticklabels(xlab)    
-    ax[i].set_yticklabels(tlab)    
-    ax[i].set_ylabel("Time [s]", fontsize = 15)
-    ax[i].set_xlabel("Distance [m]", fontsize = 15)
-    
-plt.tight_layout()
-plt.savefig("modeling_test_results.png", dpi = 300)
-
-SPS = np.loadtxt(path_SPS, dtype = float, delimiter = ",")
-RPS = np.loadtxt(path_RPS, dtype = float, delimiter = ",")
-XPS = np.loadtxt(path_XPS, dtype = int, delimiter = ",")
+fig, ax = plt.subplots(figsize = (15, 7), nrows = 3)
 
 eikonal_an = np.zeros(nr)
 
-v = np.array([1500, 1700, 1900, 2300, 3000])
-z = np.array([400, 400, 400, 400])
-
-fig, ax = plt.subplots(nrows = 4, figsize = (10,7))
-
 for i in range(ns):
 
-    eikonal_nu = pyf.read_binary_array(nr, f"../outputs/syntheticData/eikonal_iso_nStations{nr}_shot_{i+1}.bin")
-
-    x = np.sqrt((SPS[i,0] - RPS[XPS[i,1]:XPS[i,2],0])**2 + (SPS[i,1] - RPS[XPS[i,1]:XPS[i,2],1])**2)
+    x = np.sqrt((SPS[i,0] - RPS[:,0])**2 + (SPS[i,1] - RPS[:,1])**2)
 
     refractions = pyf.get_analytical_refractions(v,z,x)
-    
+
     for k in range(nr):
-        
         eikonal_an[k] = min(x[k]/v[0], np.min(refractions[:,k]))
+    
+    eikonal_nu = pyf.read_binary_array(nr, output_folder + f"eikonal_iso_nStations{nr}_shot_{i+1}.bin")
 
     ax[i].plot(eikonal_an - eikonal_nu, "k")
 
@@ -115,3 +72,4 @@ for i in range(ns):
 
 fig.tight_layout()
 plt.savefig("modeling_test_accuracy.png", dpi = 200)
+plt.show()

@@ -2,17 +2,17 @@
 # Model paramenters --------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------
 
-x_samples = 321                           # <int>  
-y_samples = 201                           # <int>  
-z_samples = 81                            # <int>  
+x_samples = 2001                         # <int>  
+y_samples = 101                          # <int>  
+z_samples = 501                          # <int>  
 
-x_spacing = 25.0                          # [m] <float> 
-y_spacing = 25.0                          # [m] <float> 
-z_spacing = 25.0                          # [m] <float> 
+x_spacing = 10.0                         # [m] <float> 
+y_spacing = 10.0                         # [m] <float> 
+z_spacing = 10.0                         # [m] <float> 
 
-vp_model_file = ../inputs/models/modeling_test_vp_model_81x321x201_25m.bin   
-vs_model_file = ../inputs/models/modeling_test_vs_model_81x321x201_25m.bin   
-ro_model_file = ../inputs/models/modeling_test_ro_model_81x321x201_25m.bin   
+vp_model_file = ../inputs/models/modeling_test_vp.bin   
+
+Cijkl_folder = ../inputs/models/modeling_test_
 
 #---------------------------------------------------------------------------------------------------
 # Geometry parameters ------------------------------------------------------------------------------
@@ -25,20 +25,10 @@ XPS = ../inputs/geometry/modeling_test_XPS.txt
 #---------------------------------------------------------------------------------------------------
 # Modeling parameters ------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------
-# [0] - Eikonal ISO
-# [1] - Eikonal VTI
-#
-# [2] - Elastic ISO
-# [3] - Elastic VTI
+# [0] - Eikonal ISO 
+# [1] - Eikonal ANI
 # --------------------------------------------------------------------------------------------------
 
 modeling_type = 0 
 
-time_samples = 1001
-time_spacing = 1e-3
-max_frequency = 30.0
-
-boundary_samples = 100
-boundary_damping = 0.0025
-
-modeling_output_folder = ../outputs/syntheticData/            
+modeling_output_folder = ../outputs/data/modeling_test_

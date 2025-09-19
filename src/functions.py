@@ -1,23 +1,29 @@
 import numpy as np
-import segyio as sgy
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from scipy.interpolate import interp1d
-from matplotlib.widgets import Cursor
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-def read_binary_array(n1, filename):
+def catch_parameter(parameters, target):
+    file = open(parameters, "r")
+    for line in file.readlines():
+        if line[0] != "#":
+            splitted = line.split()
+            if len(splitted) != 0:
+                if splitted[0] == target: 
+                    return splitted[2]     
+
+def read_binary_array(n1,filename):
     return np.fromfile(filename, dtype = np.float32, count = n1)    
 
-def read_binary_matrix(n1, n2, filename):
-    data = np.fromfile(filename, dtype = np.float32, count = n1*n2)    
-    return np.reshape(data, [n1, n2], order = 'F')
+def read_binary_matrix(n1,n2,filename):
+    data = np.fromfile(filename, dtype = np.float32, count = n1*n2)   
+    return np.reshape(data, [n1, n2], order='F')
 
 def read_binary_volume(n1, n2, n3, filename):
     data = np.fromfile(filename, dtype = np.float32, count = n1*n2*n3)    
     return np.reshape(data, [n1, n2, n3], order = 'F')
-    
+
 def get_analytical_refractions(v, z, x):
 
     refracted_waves = np.zeros((len(z), len(x)))
@@ -29,6 +35,82 @@ def get_analytical_refractions(v, z, x):
             refracted_waves[n,:] += 2.0*z[i]*np.cos(angle) / v[i]
     
     return refracted_waves
+
+def get_analytical_time_reflections(v, z, x):
+
+    Tint = 2.0 * z * v[:-1]
+    Vrms = np.zeros(len(z))
+
+    reflections = np.zeros((len(z), len(x)))
+    for i in range(len(z)):
+        Vrms[i] = np.sqrt(np.sum(v[:i+1]**2 * Tint[:i+1]) / np.sum(Tint[:i+1]))
+        reflections[i] = np.sqrt(x**2 + 4.0*np.sum(z[:i+1])**2) / Vrms[i]
+
+    return reflections 
+
+def get_analytical_amps_reflections(vp, ro, z):
+    
+    reflectivity = np.zeros(len(z))    
+    reflectivity = (vp[1:]*ro[1:] - vp[:-1]*ro[:-1]) / (vp[1:]*ro[1:] + vp[:-1]*ro[:-1])
+
+    reflections = np.zeros_like(reflectivity)
+    transmission = np.zeros_like(reflectivity)
+
+    reflections[0] = reflectivity[0]
+    transmission[0] = 1.0 - reflectivity[0]
+
+    for i in range(1, len(reflectivity)):
+        reflections[i] = transmission[i-1]*reflectivity[i]
+        transmission[i] = transmission[i-1]*(1.0 - reflectivity[i])
+
+        for j in range(i,0,-1):
+            reflections[i] *= 1.0 - reflectivity[i - j]
+
+    return reflections
+
+def get_ricker_wavelet(nt, dt, fmax):
+    fc = fmax / (3.0*np.sqrt(np.pi))
+    arg = np.pi*((np.arange(nt) - 0.5*nt)*dt*fc*np.pi)**2
+    return (1.0 - 2.0*arg)*np.exp(-arg)
+
+def compute_stiffness(vp, vs, ro, ep, dl, tht):
+    
+    SI = 1e9
+
+    C = np.zeros((3,3))
+    M = np.zeros((3,3))
+
+    c11 = 0; c13 = 0; c15 = 0
+    c33 = 0; c35 = 0; c55 = 0
+
+    SI = 1e9
+
+    c33 = ro*vp**2 / SI
+    c55 = ro*vs**2 / SI
+
+    c11 = c33*(1.0 + 2.0*ep)
+
+    c13 = np.sqrt((c33 - c55)**2 + 2.0*dl*c33*(c33 - c55)) - c55
+
+    C[0,0] = c11; C[0,1] = c13; C[0,2] = c15  
+    C[1,0] = c13; C[1,1] = c33; C[1,2] = c35  
+    C[2,0] = c15; C[2,1] = c35; C[2,2] = c55     
+
+    tht = np.radians(tht)
+
+    c = np.cos(tht)
+    s = np.sin(tht)
+
+    sin2 = np.sin(2.0*tht)
+    cos2 = np.cos(2.0*tht)
+
+    M = np.array([[     c**2,     s**2, sin2],
+                  [     s**2,     c**2,-sin2],
+                  [-0.5*sin2, 0.5*sin2, cos2]])
+    
+    Cr = (M @ C @ M.T) * SI
+
+    return Cr
 
 def plot_model_3D(model, dh, slices, **kwargs):
 
@@ -220,10 +302,10 @@ def plot_model_3D(model, dh, slices, **kwargs):
                 ax.contour(eiks[k], levels = eikonal_levels, colors = eikonal_colors, linestyles = "dashed")
 
             if nodes_defined:
-                ax.plot(xnode[k], ynode[k], "o", markersize = 5, color = "gray")
+                ax.plot(xnode[k], ynode[k], "o", markersize = 5, color = "blue")
             
             if shots_defined:
-                ax.plot(xshot[k], yshot[k], "*", markersize = 5, color = "black")
+                ax.plot(xshot[k], yshot[k], "*", markersize = 5, color = "green")
 
             ax.tick_params(direction = xTickDirection[k], axis='x') 
             ax.tick_params(direction = yTickDirection[k], axis='y') 
@@ -240,169 +322,4 @@ def plot_model_3D(model, dh, slices, **kwargs):
             if yInvert[k]:
                 ax.invert_yaxis()
     
-    return None
-
-
-class Pick():
-    def __init__(self):
-        self.x = np.array([])
-        self.t = np.array([])
-
-class ManualPicking(Pick):
-    
-    def __init__(self, data_path, gain):
-        
-        self.gain = gain
-
-        self.data = sgy.open(data_path, ignore_geometry = True)
-
-        self.traces = [self.data.attributes(13)[self.data.tracecount-1][0]]
-
-        self.nt = self.data.attributes(115)[0][0]
-        self.dt = self.data.attributes(117)[0][0] * 1e-6
-
-        self.sx = self.data.attributes(73)[:] * 1e-5
-        self.sy = self.data.attributes(77)[:] * 1e-5
-
-        self.gx = self.data.attributes(81)[:] * 1e-5
-        self.gy = self.data.attributes(85)[:] * 1e-5
-
-        self.seismic = self.data.trace.raw[:].T
-
-        self.picks = []
-        self.gathers = []
-
-        for i in range(len(self.traces)):
-            self.picks.append(Pick())
-            self.gathers.append(self.seismic[:,sum(self.traces[:i]):sum(self.traces[:i+1])])
-
-        self.current_plot = 0
-
-        for i in range(len(self.traces)):
-            while True:
-                if self.current_plot == i:
-                    print("Close plot windows to interpolate picks")
-                    self.plot_figures()
-                    self.interpolation()
-                    self.plot_figures()
-
-                    self.entry = str(input("Continue picking? (y or n) "))
-                    if self.entry in "nN":
-                        self.save_picks()
-                        break
-
-            self.current_plot += 1
-
-    def plot_geometry(self):
-        
-        fig, ax = plt.subplots(dpi = 100, tight_layout = True)        
-        manager = plt.get_current_fig_manager()
-        manager.window.setGeometry(0,0,500,500) 
-
-        ax.plot(self.gx, self.gy, "ob", markersize = 1, alpha = 0.6, label = "Nodes position")
-
-        for i in range(len(self.traces)):
-            if self.current_plot == i:
-                trace_slicer = slice(sum(self.traces[:i]), sum(self.traces[:i+1]))
-                ax.plot(self.gx[trace_slicer], self.gy[trace_slicer], "og", markersize = 3, label = "Active gather")
-
-        ax.plot(self.sx, self.sy, "or", markersize = 5, label = "Shots position")
-
-        ax.set_title("Acquisition Geometry")
-        ax.set_xlabel("UTM E [km]")
-        ax.set_ylabel("UTM N [km]")
-        ax.legend(loc = "lower left")
-        
-        fig.tight_layout()
-
-    def plot_seismic(self):
-
-        self.fig, self.ax = plt.subplots(dpi = 100, tight_layout = True)
-
-        tloc = np.linspace(0, self.nt, 21)
-        tlab = np.around(tloc*self.dt, decimals = 2)
-
-        manager = plt.get_current_fig_manager()
-        manager.window.setGeometry(600,0,1200,900) 
-        
-        self.cursor = Cursor(self.ax, horizOn = True, vertOn = True, color = "green", linewidth = 1)
-
-        self.ax.set_title(f"Gather {self.current_plot+1}")
-        self.ax.set_xlabel("Shot index")
-        self.ax.set_ylabel("Time [s]")
-
-        for i in range(len(self.traces)):
-            if self.current_plot == i:
-                
-                scale = self.gain * np.std(self.gathers[i])
-                
-                self.ax.imshow(self.gathers[i], aspect = "auto", cmap = "Greys", vmin = -scale, vmax = scale)
-                self.ax.plot(self.picks[i].x, self.picks[i].t, "or")
-
-                self.ax.set_yticks(tloc)
-                self.ax.set_yticklabels(tlab)
-
-                xloc = np.linspace(0, self.traces[i]-1, 9, dtype = int)
-                xlab = np.linspace(1, self.traces[i], 9, dtype = int)
-
-                self.ax.set_xticks(xloc)
-                self.ax.set_xticklabels(xlab)
-
-                self.fig.tight_layout()
-
-                self.fig.canvas.mpl_connect("key_press_event", self.pick_data)
-
-    def pick_data(self, event):
-
-        for i in range(len(self.traces)):
-            if self.current_plot == i:
-
-                if event.key == "t":
-                    self.picks[i].x = np.append(self.picks[i].x, np.abs(int(event.xdata)))
-                    self.picks[i].t = np.append(self.picks[i].t, event.ydata)       
-
-                    print(f"Pick (x,t) = ({self.picks[i].x[-1]:.0f}, {self.picks[i].t[-1]*self.dt:.3f}) picked")
-
-                elif event.key == "d":
-                    
-                    print(f"Pick (x,t) = ({self.picks[i].x[-1]:.0f}, {self.picks[i].t[-1]*self.dt:.3f}) deleted")
-
-                    self.picks[i].x = self.picks[i].x[:-1]
-                    self.picks[i].t = self.picks[i].t[:-1]    
-                    
-                self.ax.plot(self.picks[i].x, self.picks[i].t, "or")
-    
-    def plot_figures(self):
-        plt.close("all")
-        self.plot_seismic()
-        self.plot_geometry()
-        plt.show()
-
-    def interpolation(self):
-        for i in range(len(self.traces)):
-            
-            if len(self.picks[i].x) < 3:
-                return None
-            
-            if self.current_plot == i:
-                
-                x = np.arange(np.min(self.picks[i].x), np.max(self.picks[i].x) + 1)        
-
-                f = interp1d(self.picks[i].x, self.picks[i].t, kind = "slinear")
-
-                t = f(x)
-
-                self.picks[i].x = x.copy()
-                self.picks[i].t = t.copy()
-
-    def save_picks(self):
-
-        output_file = f"{self.picks_path}_shotGather_{self.current_plot+1}.txt"
-
-        with open(output_file, "a") as file:
-            for i in range(len(self.traces)):
-                if self.current_plot == i:
-                    for n in range(len(self.picks[i].x)):
-                        file.write(f"{self.picks[i].x[n] + sum(self.traces[:i]):.0f}, {self.picks[i].t[n] * self.dt:.3f}\n")            
-        
-        file.close()
+    return None    
